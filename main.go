@@ -23,6 +23,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/martin-helmich/prometheus-nginxlog-exporter/config"
 	"github.com/martin-helmich/prometheus-nginxlog-exporter/discovery"
@@ -45,7 +46,7 @@ type Metrics struct {
 }
 
 // Init initializes a metrics struct
-func (m *Metrics) Init(cfg *config.NamespaceConfig) {
+func (m *Metrics) Init(cfg *config.NamespaceConfig, opts *config.StartupFlags) {
 	cfg.MustCompile()
 
 	labels := cfg.OrderedLabelNames
@@ -103,10 +104,12 @@ func (m *Metrics) Init(cfg *config.NamespaceConfig) {
 	prometheus.MustRegister(m.countTotal)
 	prometheus.MustRegister(m.bytesTotal)
 	prometheus.MustRegister(m.upstreamSeconds)
-	prometheus.MustRegister(m.upstreamSecondsHist)
 	prometheus.MustRegister(m.responseSeconds)
-	prometheus.MustRegister(m.responseSecondsHist)
 	prometheus.MustRegister(m.parseErrorsTotal)
+	if opts.EnableHistogramMetrics {
+		prometheus.MustRegister(m.upstreamSecondsHist)
+		prometheus.MustRegister(m.responseSecondsHist)
+	}
 }
 
 func main() {
@@ -123,6 +126,7 @@ func main() {
 	flag.StringVar(&opts.Namespace, "namespace", "nginx", "namespace to use for metric names")
 	flag.StringVar(&opts.ConfigFile, "config-file", "", "Configuration file to read from")
 	flag.BoolVar(&opts.EnableExperimentalFeatures, "enable-experimental", false, "Set this flag to enable experimental features")
+	flag.BoolVar(&opts.EnableHistogramMetrics, "enable-histogram-metrics", false, "Set this flag to enable histogram metrics")
 	flag.Parse()
 
 	opts.Filenames = flag.Args()
@@ -142,11 +146,19 @@ func main() {
 		setupConsul(&cfg)
 	}
 
+	var totalFileSize int64 = 0
 	for _, ns := range cfg.Namespaces {
+		for _, s := range ns.SourceFiles {
+			totalFileSize = totalFileSize + getFileSize(s)
+		}
 		fmt.Printf("starting listener for namespace %s\n", ns.Name)
 
-		go processNamespace(ns)
+		go processNamespace(ns, &opts)
 	}
+
+	warmUpTime := time.Duration(totalFileSize / (5 * 1000 * 1000))
+	fmt.Printf("warm up for %+v seconds\n", int(warmUpTime))
+	time.Sleep(warmUpTime * time.Second)
 
 	listenAddr := fmt.Sprintf("%s:%d", cfg.Listen.Address, cfg.Listen.Port)
 	fmt.Printf("running HTTP server on address %s\n", listenAddr)
@@ -188,11 +200,11 @@ func setupConsul(cfg *config.Config) {
 	}()
 }
 
-func processNamespace(nsCfg config.NamespaceConfig) {
+func processNamespace(nsCfg config.NamespaceConfig, opts *config.StartupFlags) {
 	parser := gonx.NewParser(nsCfg.Format)
 
 	metrics := Metrics{}
-	metrics.Init(&nsCfg)
+	metrics.Init(&nsCfg, opts)
 
 	for _, f := range nsCfg.SourceFiles {
 		t, err := tail.NewFollower(f)
@@ -204,11 +216,11 @@ func processNamespace(nsCfg config.NamespaceConfig) {
 			panic(err)
 		})
 
-		go processSourceFile(nsCfg, t, parser, &metrics)
+		go processSourceFile(nsCfg, t, parser, &metrics, opts)
 	}
 }
 
-func processSourceFile(nsCfg config.NamespaceConfig, t tail.Follower, parser *gonx.Parser, metrics *Metrics) {
+func processSourceFile(nsCfg config.NamespaceConfig, t tail.Follower, parser *gonx.Parser, metrics *Metrics, opts *config.StartupFlags) {
 	relabelings := relabeling.NewRelabelings(nsCfg.RelabelConfigs)
 	relabelings = append(relabeling.DefaultRelabelings, relabelings...)
 
@@ -247,12 +259,34 @@ func processSourceFile(nsCfg config.NamespaceConfig, t tail.Follower, parser *go
 
 		if upstreamTime, err := entry.FloatField("upstream_response_time"); err == nil {
 			metrics.upstreamSeconds.WithLabelValues(labelValues...).Observe(upstreamTime)
-			metrics.upstreamSecondsHist.WithLabelValues(labelValues...).Observe(upstreamTime)
+			if opts.EnableExperimentalFeatures {
+				metrics.upstreamSecondsHist.WithLabelValues(labelValues...).Observe(upstreamTime)
+			}
 		}
 
 		if responseTime, err := entry.FloatField("request_time"); err == nil {
 			metrics.responseSeconds.WithLabelValues(labelValues...).Observe(responseTime)
-			metrics.responseSecondsHist.WithLabelValues(labelValues...).Observe(responseTime)
+			if opts.EnableExperimentalFeatures {
+				metrics.responseSecondsHist.WithLabelValues(labelValues...).Observe(responseTime)
+
+			}
 		}
 	}
+}
+
+func getFileSize(path string) int64 {
+	file, err := os.Open(path)
+	if err != nil {
+		return 0
+	}
+	defer file.Close()
+
+	stat, err := file.Stat()
+	if err != nil {
+		return 0
+	}
+
+	var bytes int64
+	bytes = stat.Size()
+	return bytes
 }
