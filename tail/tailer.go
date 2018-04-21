@@ -33,6 +33,10 @@ func (f *followerImpl) start() error {
 		Follow: true,
 		ReOpen: true,
 		Poll:   true,
+		Location: &tail.SeekInfo{
+			Offset: 0,
+			Whence: 2,
+		},
 	})
 
 	if err != nil {

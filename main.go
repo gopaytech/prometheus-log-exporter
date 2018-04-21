@@ -23,7 +23,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/martin-helmich/prometheus-nginxlog-exporter/config"
 	"github.com/martin-helmich/prometheus-nginxlog-exporter/discovery"
@@ -155,10 +154,6 @@ func main() {
 
 		go processNamespace(ns, &opts)
 	}
-
-	warmUpTime := time.Duration(totalFileSize / (5 * 1000 * 1000))
-	fmt.Printf("warm up for %+v seconds\n", int(warmUpTime))
-	time.Sleep(warmUpTime * time.Second)
 
 	listenAddr := fmt.Sprintf("%s:%d", cfg.Listen.Address, cfg.Listen.Port)
 	fmt.Printf("running HTTP server on address %s\n", listenAddr)
