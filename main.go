@@ -416,6 +416,9 @@ func processSource(nsCfg config.NamespaceConfig, t tail.Follower, parser parser.
 		if responseTime, ok := floatFromFields(fields, "request_time"); ok {
 			metrics.responseSeconds.WithLabelValues(notCounterValues...).Observe(responseTime)
 			metrics.responseSecondsHist.WithLabelValues(notCounterValues...).Observe(responseTime)
+		} else if responseTime, ok := floatFromFields(fields, "request_time_milisecond"); ok {
+			metrics.responseSeconds.WithLabelValues(notCounterValues...).Observe(responseTime / 1000)
+			metrics.responseSecondsHist.WithLabelValues(notCounterValues...).Observe(responseTime / 1000)
 		}
 	}
 }
