@@ -35,8 +35,9 @@ type NamespaceConfig struct {
 }
 
 type SourceData struct {
-	Files  FileSource    `hcl:"files" yaml:"files"`
-	Syslog *SyslogSource `hcl:"syslog" yaml:"syslog"`
+	OriginalFiles FileSource
+	Files         FileSource    `hcl:"files" yaml:"files"`
+	Syslog        *SyslogSource `hcl:"syslog" yaml:"syslog"`
 }
 
 type FileSource []string
@@ -80,29 +81,41 @@ func (c *NamespaceConfig) ResolveDeprecations() {
 	}
 }
 
-// ResolveGlobs finds globs in file sources and expand them to the actual
-// list of files
-func (c *NamespaceConfig) ResolveGlobs() error {
-	if len(c.SourceData.Files) > 0 {
+func (c *NamespaceConfig) GetAllGlobs() ([]string, error) {
+	if len(c.SourceData.OriginalFiles) > 0 {
 		resolvedFiles := make([]string, 0)
-		for _, sf := range c.SourceData.Files {
+		for _, sf := range c.SourceData.OriginalFiles {
 			if strings.Contains(sf, "*") {
 				matches, err := filepath.Glob(sf)
 				if err != nil {
-					return err
+					return []string{}, err
 				}
-				fmt.Printf("Resolved globs %v to %v\n", sf, matches)
 				resolvedFiles = append(resolvedFiles, matches...)
 			} else {
-				fmt.Printf("No globs for %v\n", sf)
 				resolvedFiles = append(resolvedFiles, sf)
 			}
 		}
-
-		// update fields with new list of files
-		c.SourceData.Files = resolvedFiles
-		c.SourceFiles = resolvedFiles
+		return resolvedFiles, nil
 	}
+	return []string{}, nil
+}
+
+// ResolveGlobs finds globs in file sources and expand them to the actual
+// list of files
+func (c *NamespaceConfig) ResolveGlobs() error {
+	if len(c.SourceData.Files) > 0 && len(c.SourceData.OriginalFiles) == 0 {
+		c.SourceData.OriginalFiles = c.SourceData.Files
+	}
+
+	resolvedFiles, err := c.GetAllGlobs()
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Resolved Files %v\n", resolvedFiles)
+
+	c.SourceData.Files = resolvedFiles
+	c.SourceFiles = resolvedFiles
+
 	return nil
 }
 

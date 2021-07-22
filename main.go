@@ -25,6 +25,7 @@ import (
 	"strconv"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/martin-helmich/prometheus-nginxlog-exporter/syslog"
 
@@ -181,7 +182,7 @@ func main() {
 
 	flag.IntVar(&opts.ListenPort, "listen-port", 4040, "HTTP port to listen on")
 	flag.StringVar(&opts.ListenAddress, "listen-address", "0.0.0.0", "IP-address to bind")
-	flag.StringVar(&opts.Parser, "parser", "text", "NGINX access log format parser. One of: [text, json]")
+	flag.StringVar(&opts.Parser, "parser", "text", "NGINX access log format parser. One of: [text, json, kube]")
 	flag.StringVar(&opts.Format, "format", `$remote_addr - $remote_user [$time_local] "$request" $status $body_bytes_sent "$http_referer" "$http_user_agent" "$http_x_forwarded_for"`, "NGINX access log format")
 	flag.StringVar(&opts.Namespace, "namespace", "nginx", "namespace to use for metric names")
 	flag.StringVar(&opts.ConfigFile, "config-file", "", "Configuration file to read from")
@@ -300,7 +301,7 @@ func setupConsul(cfg *config.Config, stopChan <-chan bool, stopHandlers *sync.Wa
 }
 
 func processNamespace(nsCfg config.NamespaceConfig, metrics *Metrics) {
-	var followers []tail.Follower
+	followers := map[string]tail.Follower{}
 
 	parser := parser.NewParser(nsCfg)
 
@@ -314,7 +315,7 @@ func processNamespace(nsCfg config.NamespaceConfig, metrics *Metrics) {
 			panic(err)
 		})
 
-		followers = append(followers, t)
+		followers[f] = t
 	}
 
 	if nsCfg.SourceData.Syslog != nil {
@@ -336,7 +337,7 @@ func processNamespace(nsCfg config.NamespaceConfig, metrics *Metrics) {
 				panic(err)
 			})
 
-			followers = append(followers, t)
+			followers[f] = t
 		}
 	}
 
@@ -351,6 +352,22 @@ func processNamespace(nsCfg config.NamespaceConfig, metrics *Metrics) {
 
 	for _, f := range followers {
 		go processSource(nsCfg, f, parser, metrics, hasCounterOnlyLabels)
+	}
+
+	for {
+		files, _ := nsCfg.GetAllGlobs()
+		for _, f := range files {
+			if _, ok := followers[f]; !ok {
+				fmt.Println("A new file detected: ", f)
+				t, err := tail.NewFileFollower(f)
+				if err != nil {
+					continue
+				}
+				followers[f] = t
+				go processSource(nsCfg, t, parser, metrics, hasCounterOnlyLabels)
+			}
+		}
+		time.Sleep(10 * time.Second)
 	}
 
 }
