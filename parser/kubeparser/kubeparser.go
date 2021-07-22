@@ -2,6 +2,7 @@ package kubeparser
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/satyrius/gonx"
 	"github.com/tidwall/gjson"
@@ -22,6 +23,8 @@ func NewKubeParser(format string) *KubeParser {
 // ParseString implements the Parser interface.
 func (t *KubeParser) ParseString(line string) (map[string]string, error) {
 	actualLogLine := gjson.Get(line, "log").String()
+	actualLogLine = strings.TrimSpace(actualLogLine)
+
 	entry, err := t.parser.ParseString(actualLogLine)
 	if err != nil {
 		return nil, fmt.Errorf("text log parsing err: %w", err)
