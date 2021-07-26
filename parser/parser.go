@@ -2,6 +2,7 @@ package parser
 
 import (
 	"github.com/martin-helmich/prometheus-nginxlog-exporter/config"
+	"github.com/martin-helmich/prometheus-nginxlog-exporter/parser/istioparser"
 	"github.com/martin-helmich/prometheus-nginxlog-exporter/parser/jsonparser"
 	"github.com/martin-helmich/prometheus-nginxlog-exporter/parser/kubeparser"
 	"github.com/martin-helmich/prometheus-nginxlog-exporter/parser/textparser"
@@ -21,6 +22,8 @@ func NewParser(nsCfg config.NamespaceConfig) Parser {
 		return jsonparser.NewJsonParser()
 	case "kube":
 		return kubeparser.NewKubeParser(nsCfg.Format)
+	case "istio":
+		return istioparser.NewIstioParser()
 	default:
 		return textparser.NewTextParser(nsCfg.Format)
 	}
