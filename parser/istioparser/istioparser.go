@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/tidwall/gjson"
 )
 
 // IstioParser parse a JSON string.
@@ -18,8 +20,11 @@ func NewIstioParser() *IstioParser {
 // ParseString implements the Parser interface.
 // The value in the map is not necessarily a string, so it needs to be converted.
 func (j *IstioParser) ParseString(line string) (map[string]string, error) {
+	actualLogLine := gjson.Get(line, "log").String()
+	actualLogLine = strings.TrimSpace(actualLogLine)
+
 	var parsed map[string]interface{}
-	err := json.Unmarshal([]byte(line), &parsed)
+	err := json.Unmarshal([]byte(actualLogLine), &parsed)
 	if err != nil {
 		return nil, fmt.Errorf("json log parsing err: %w", err)
 	}
