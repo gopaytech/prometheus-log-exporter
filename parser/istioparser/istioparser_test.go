@@ -28,6 +28,7 @@ func TestIstioParse(t *testing.T) {
 		"request":                "PUT /v1/order/2145 HTTP/1.1",
 		"request_method":         "PUT",
 		"upstream_cluster":       "payment-service",
+		"authority":              "payment.example.com",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("IstioParser.Parse(), got:\n%v\nwant\n%v", got, want)

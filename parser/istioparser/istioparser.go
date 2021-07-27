@@ -63,6 +63,7 @@ func (j *IstioParser) ParseString(line string) (map[string]string, error) {
 		"status":                 j.GetValue(fields, "response_code", ""),
 		"time_local":             j.GetValue(fields, "start_time", ""),
 		"upstream_cluster":       j.GetUpstreamCluster(fields),
+		"authority":              j.GetValue(fields, "authority", ""),
 	}
 	return result, nil
 }
