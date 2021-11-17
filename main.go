@@ -199,8 +199,7 @@ func main() {
 	stopChan := make(chan bool)
 	stopHandlers := sync.WaitGroup{}
 
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGINT)
+	signal.Notify(sigChan, syscall.SIGHUP)
 
 	go func() {
 		sig := <-sigChan
@@ -210,13 +209,18 @@ func main() {
 		close(stopChan)
 		stopHandlers.Wait()
 
-		os.Exit(0)
+		switch sig {
+		case syscall.SIGHUP:
+			os.Exit(111)
+		default:
+			os.Exit(0)
+		}
 	}()
 
-	defer func() {
-		close(stopChan)
-		stopHandlers.Wait()
-	}()
+	//defer func() {
+	//close(stopChan)
+	//stopHandlers.Wait()
+	//}()
 
 	prof.SetupCPUProfiling(opts.CPUProfile, stopChan, &stopHandlers)
 	prof.SetupMemoryProfiling(opts.MemProfile, stopChan, &stopHandlers)
@@ -393,6 +397,7 @@ func processSource(nsCfg config.NamespaceConfig, t tail.Follower, parser parser.
 		}
 
 		fields, err := parser.ParseString(line)
+		fmt.Println(fields)
 		if err != nil {
 			fmt.Printf("error while parsing line '%s': %s\n", line, err)
 			metrics.parseErrorsTotal.Inc()
