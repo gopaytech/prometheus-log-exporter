@@ -81,6 +81,17 @@ func (j *HaproxyJsonParser) ParseString(line string) (map[string]string, error) 
 		// convert to second format
 		result["upstream_response_time"] = fmt.Sprintf("%.3f", float64(intUpstreamTime)/1000)
 		result["request_time"] = fmt.Sprintf("%.3f", float64(intRequestTime)/1000)
+	} else if v, ok := parsed["Tw/Tc/Tr"]; ok {
+		timeSplit := strings.Split(v, "/")
+		if len(timeSplit) != 3 {
+			return nil, errors.New("Error parse request time")
+		}
+		intRequestTime, err := strconv.Atoi(timeSplit[2])
+		if err != nil {
+			return nil, errors.New("Error parse request time")
+		}
+		// convert to second format
+		result["request_time"] = fmt.Sprintf("%.3f", float64(intRequestTime)/1000)
 	} else {
 		return nil, errors.New("Error parse request time")
 	}
