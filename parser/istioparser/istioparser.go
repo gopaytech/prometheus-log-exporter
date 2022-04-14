@@ -10,18 +10,40 @@ import (
 )
 
 // IstioParser parse a JSON string.
-type IstioParser struct{}
+type IstioParser struct {
+	fnGetKubeLog func(string) string
+}
 
 // NewIstioParser returns a new json parser.
 func NewIstioParser() *IstioParser {
 	return &IstioParser{}
 }
 
+func NewIstioCRIParser() *IstioParser {
+	return &IstioParser{
+		fnGetKubeLog: func(s string) string {
+			// timestamp stdout [FP] actualLog
+			return strings.SplitN(s, " ", 4)[3]
+		},
+	}
+}
+
+// kubernetes wrap the actual log line, need to unwrap it to get the actual
+func (p *IstioParser) getKubeLogLine(line string) string {
+	if p.fnGetKubeLog == nil {
+		p.fnGetKubeLog = func(s string) string {
+			line := gjson.Get(s, "log").String()
+			return strings.TrimSpace(line)
+		}
+	}
+
+	return p.fnGetKubeLog(line)
+}
+
 // ParseString implements the Parser interface.
 // The value in the map is not necessarily a string, so it needs to be converted.
-func (j *IstioParser) ParseString(line string) (map[string]string, error) {
-	actualLogLine := gjson.Get(line, "log").String()
-	actualLogLine = strings.TrimSpace(actualLogLine)
+func (p *IstioParser) ParseString(line string) (map[string]string, error) {
+	actualLogLine := p.getKubeLogLine(line)
 
 	var parsed map[string]interface{}
 	err := json.Unmarshal([]byte(actualLogLine), &parsed)
@@ -38,37 +60,37 @@ func (j *IstioParser) ParseString(line string) (map[string]string, error) {
 		}
 	}
 
-	requestTime, err := strconv.ParseFloat(j.GetValue(fields, "duration", ""), 64)
+	requestTime, err := strconv.ParseFloat(p.GetValue(fields, "duration", ""), 64)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to parse request_time, value: %+v", j.GetValue(fields, "duration", ""))
+		return nil, fmt.Errorf("Failed to parse request_time, value: %+v", p.GetValue(fields, "duration", ""))
 	}
 
-	upstreamRequestTime, err := strconv.ParseFloat(j.GetValue(fields, "upstream_service_time", ""), 64)
+	upstreamRequestTime, err := strconv.ParseFloat(p.GetValue(fields, "upstream_service_time", ""), 64)
 	if err != nil {
 		upstreamRequestTime = 0
 	}
 
 	result := map[string]string{
-		"body_bytes_sent": j.GetValue(fields, "bytes_sent", ""),
+		"body_bytes_sent": p.GetValue(fields, "bytes_sent", ""),
 		"request": fmt.Sprintf(
 			"%s %s %s",
-			j.GetValue(fields, "method", ""),
-			j.GetValue(fields, "path", ""),
-			j.GetValue(fields, "protocol", ""),
+			p.GetValue(fields, "method", ""),
+			p.GetValue(fields, "path", ""),
+			p.GetValue(fields, "protocol", ""),
 		),
-		"request_length":         j.GetValue(fields, "bytes_received", ""),
-		"request_method":         j.GetValue(fields, "method", ""),
+		"request_length":         p.GetValue(fields, "bytes_received", ""),
+		"request_method":         p.GetValue(fields, "method", ""),
 		"request_time":           strconv.FormatFloat(requestTime/1000, 'f', 3, 64),         // divide by 1000, convert from ms to s
 		"upstream_response_time": strconv.FormatFloat(upstreamRequestTime/1000, 'f', 3, 64), // divide by 1000, convert from ms to s
-		"status":                 j.GetValue(fields, "response_code", ""),
-		"time_local":             j.GetValue(fields, "start_time", ""),
-		"upstream_cluster":       j.GetUpstreamCluster(fields),
-		"authority":              j.GetValue(fields, "authority", ""),
+		"status":                 p.GetValue(fields, "response_code", ""),
+		"time_local":             p.GetValue(fields, "start_time", ""),
+		"upstream_cluster":       p.GetUpstreamCluster(fields),
+		"authority":              p.GetValue(fields, "authority", ""),
 	}
 	return result, nil
 }
 
-func (j *IstioParser) GetUpstreamCluster(fields map[string]string) string {
+func (p *IstioParser) GetUpstreamCluster(fields map[string]string) string {
 	if v, ok := fields["upstream_cluster"]; ok {
 		s := strings.Split(v, "|")
 		if len(s) > 0 {
@@ -81,7 +103,7 @@ func (j *IstioParser) GetUpstreamCluster(fields map[string]string) string {
 	}
 }
 
-func (j *IstioParser) GetValue(fields map[string]string, key, defaultValue string) string {
+func (p *IstioParser) GetValue(fields map[string]string, key, defaultValue string) string {
 	if v, ok := fields[key]; ok {
 		return v
 	} else {

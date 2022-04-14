@@ -25,8 +25,12 @@ func NewParser(nsCfg config.NamespaceConfig) Parser {
 		return jsonparser.NewJsonParser()
 	case "kube":
 		return kubeparser.NewKubeParser(nsCfg.Format)
+	case "kube-cri":
+		return kubeparser.NewKubeCRIParser(nsCfg.Format)
 	case "istio":
 		return istioparser.NewIstioParser()
+	case "istio-cri":
+		return istioparser.NewIstioCRIParser()
 	default:
 		return textparser.NewTextParser(nsCfg.Format)
 	}
