@@ -397,7 +397,6 @@ func processSource(nsCfg config.NamespaceConfig, t tail.Follower, parser parser.
 		}
 
 		fields, err := parser.ParseString(line)
-		fmt.Println(fields)
 		if err != nil {
 			fmt.Printf("error while parsing line '%s': %s\n", line, err)
 			metrics.parseErrorsTotal.Inc()
