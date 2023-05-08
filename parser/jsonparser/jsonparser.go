@@ -27,6 +27,16 @@ func NewKubeJsonParser() *JsonParser {
 	}
 }
 
+func NewKubeJsonCRIParser() *JsonParser {
+	return &JsonParser{
+		fnGetActualLog: func(line string) string {
+			// CRI format:
+			// timestamp stdout [FP] actualLog
+			return strings.TrimSpace(strings.SplitN(line, " ", 4)[3])
+		},
+	}
+}
+
 // ParseString implements the Parser interface.
 // The value in the map is not necessarily a string, so it needs to be converted.
 func (j *JsonParser) ParseString(line string) (map[string]string, error) {
